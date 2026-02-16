@@ -1,0 +1,295 @@
+{
+  "info": {
+    "name": "Twitter Platform API Tests",
+    "description": "Comprehensive test suite for Twitter API endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Post New Tweet",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Status code should be 201 (created)",
+              "pm.test('Status code should be 201', function() {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "// Response time should be less than 800ms",
+              "pm.test('Response time should be less than 800ms', function() {",
+              "    pm.expect(pm.response.responseTime).to.be.below(800);",
+              "});",
+              "",
+              "const jsonData = pm.response.json();",
+              "",
+              "// Tweet ID should be 18-19 digit string",
+              "pm.test('Tweet ID should be 18-19 digit string', function() {",
+              "    pm.expect(jsonData.data.id).to.be.a('string');",
+              "    pm.expect(jsonData.data.id.length).to.be.within(18, 19);",
+              "    pm.expect(jsonData.data.id).to.match(/^\\d{18,19}$/);",
+              "});",
+              "",
+              "// Tweet text should match request content",
+              "pm.test('Tweet text should match request content', function() {",
+              "    const requestBody = JSON.parse(pm.request.body.raw);",
+              "    pm.expect(jsonData.data.text).to.equal(requestBody.text);",
+              "});",
+              "",
+              "// Created timestamp should be recent (within 10 seconds)",
+              "pm.test('Created timestamp should be recent (within 10 seconds)', function() {",
+              "    const createdAt = new Date(jsonData.data.created_at);",
+              "    const now = new Date();",
+              "    const diffSeconds = Math.abs((now - createdAt) / 1000);",
+              "    pm.expect(diffSeconds).to.be.below(10);",
+              "});",
+              "",
+              "// Initial engagement metrics should be 0",
+              "pm.test('Initial retweets should be 0', function() {",
+              "    pm.expect(jsonData.data.public_metrics.retweet_count).to.equal(0);",
+              "});",
+              "",
+              "pm.test('Initial likes should be 0', function() {",
+              "    pm.expect(jsonData.data.public_metrics.like_count).to.equal(0);",
+              "});",
+              "",
+              "pm.test('Initial replies should be 0', function() {",
+              "    pm.expect(jsonData.data.public_metrics.reply_count).to.equal(0);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Hello Twitter API! Testing from Postman\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v2/tweets",
+          "host": ["{{baseUrl}}"],
+          "path": ["v2", "tweets"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get User Timeline",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Status code should be 200",
+              "pm.test('Status code should be 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "// Response time should be less than 1000ms",
+              "pm.test('Response time should be less than 1000ms', function() {",
+              "    pm.expect(pm.response.responseTime).to.be.below(1000);",
+              "});",
+              "",
+              "const jsonData = pm.response.json();",
+              "",
+              "// Data array should contain tweet objects",
+              "pm.test('Data array should contain tweet objects', function() {",
+              "    pm.expect(jsonData.data).to.be.an('array');",
+              "    pm.expect(jsonData.data.length).to.be.above(0);",
+              "});",
+              "",
+              "// Each tweet should have id, text, created_at, public_metrics",
+              "pm.test('Each tweet should have id field', function() {",
+              "    jsonData.data.forEach(function(tweet) {",
+              "        pm.expect(tweet).to.have.property('id');",
+              "    });",
+              "});",
+              "",
+              "pm.test('Each tweet should have text field', function() {",
+              "    jsonData.data.forEach(function(tweet) {",
+              "        pm.expect(tweet).to.have.property('text');",
+              "    });",
+              "});",
+              "",
+              "pm.test('Each tweet should have created_at field', function() {",
+              "    jsonData.data.forEach(function(tweet) {",
+              "        pm.expect(tweet).to.have.property('created_at');",
+              "    });",
+              "});",
+              "",
+              "pm.test('Each tweet should have public_metrics field', function() {",
+              "    jsonData.data.forEach(function(tweet) {",
+              "        pm.expect(tweet).to.have.property('public_metrics');",
+              "    });",
+              "});",
+              "",
+              "// Pagination metadata should include result_count",
+              "pm.test('Pagination metadata should include result_count', function() {",
+              "    pm.expect(jsonData.meta).to.have.property('result_count');",
+              "    pm.expect(jsonData.meta.result_count).to.be.a('number');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v2/users/by/username/testuser/tweets",
+          "host": ["{{baseUrl}}"],
+          "path": ["v2", "users", "by", "username", "testuser", "tweets"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Trending Topics",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Status code should be 200",
+              "pm.test('Status code should be 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "// Response time should be less than 1500ms",
+              "pm.test('Response time should be less than 1500ms', function() {",
+              "    pm.expect(pm.response.responseTime).to.be.below(1500);",
+              "});",
+              "",
+              "const jsonData = pm.response.json();",
+              "",
+              "// Data array should contain at least 5 trends",
+              "pm.test('Data array should contain at least 5 trends', function() {",
+              "    pm.expect(jsonData.data).to.be.an('array');",
+              "    pm.expect(jsonData.data.length).to.be.at.least(5);",
+              "});",
+              "",
+              "// Each trend should have hashtag, tweet_volume, trend_rank",
+              "pm.test('Each trend should have hashtag field', function() {",
+              "    jsonData.data.forEach(function(trend) {",
+              "        pm.expect(trend).to.have.property('hashtag');",
+              "    });",
+              "});",
+              "",
+              "pm.test('Each trend should have tweet_volume field', function() {",
+              "    jsonData.data.forEach(function(trend) {",
+              "        pm.expect(trend).to.have.property('tweet_volume');",
+              "    });",
+              "});",
+              "",
+              "pm.test('Each trend should have trend_rank field', function() {",
+              "    jsonData.data.forEach(function(trend) {",
+              "        pm.expect(trend).to.have.property('trend_rank');",
+              "    });",
+              "});",
+              "",
+              "// Tweet volumes should be positive numbers",
+              "pm.test('Tweet volumes should be positive numbers', function() {",
+              "    jsonData.data.forEach(function(trend) {",
+              "        pm.expect(trend.tweet_volume).to.be.a('number');",
+              "        pm.expect(trend.tweet_volume).to.be.above(0);",
+              "    });",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1.1/trends/place.json?id=1",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1.1", "trends", "place.json"],
+          "query": [
+            {
+              "key": "id",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Analytics Data",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Status code should be 200",
+              "pm.test('Status code should be 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "// Response time should be less than 2000ms",
+              "pm.test('Response time should be less than 2000ms', function() {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "const jsonData = pm.response.json();",
+              "",
+              "// Should contain tweet_impressions, profile_visits, follower_count",
+              "pm.test('Should contain tweet_impressions field', function() {",
+              "    pm.expect(jsonData.data).to.have.property('tweet_impressions');",
+              "    pm.expect(jsonData.data.tweet_impressions).to.be.a('number');",
+              "});",
+              "",
+              "pm.test('Should contain profile_visits field', function() {",
+              "    pm.expect(jsonData.data).to.have.property('profile_visits');",
+              "    pm.expect(jsonData.data.profile_visits).to.be.a('number');",
+              "});",
+              "",
+              "pm.test('Should contain follower_count field', function() {",
+              "    pm.expect(jsonData.data).to.have.property('follower_count');",
+              "    pm.expect(jsonData.data.follower_count).to.be.a('number');",
+              "});",
+              "",
+              "// Date range should be in YYYY-MM-DD format",
+              "pm.test('Start date should be in YYYY-MM-DD format', function() {",
+              "    pm.expect(jsonData.data.date_range.start).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+              "});",
+              "",
+              "pm.test('End date should be in YYYY-MM-DD format', function() {",
+              "    pm.expect(jsonData.data.date_range.end).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v2/users/analytics",
+          "host": ["{{baseUrl}}"],
+          "path": ["v2", "users", "analytics"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    }
+  ]
+}

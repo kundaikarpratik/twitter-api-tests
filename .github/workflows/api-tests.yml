@@ -1,0 +1,203 @@
+name: Twitter API Tests CI/CD
+
+# Trigger conditions
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily at 9 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  api-tests:
+    name: Run Twitter API Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      
+      # Step 2: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      
+      # Step 3: Install Newman
+      - name: Install Newman and Reporters
+        run: |
+          npm install -g newman
+          npm install -g newman-reporter-html
+          npm install -g newman-reporter-htmlextra
+      
+      # Step 4: Start Mock Server in Background
+      - name: Start Twitter Mock Server
+        run: |
+          node twitter-mock-server-standalone.js &
+          echo $! > server.pid
+          sleep 3
+          curl http://localhost:3000/v2/users/analytics || exit 1
+        continue-on-error: false
+      
+      # Step 5: Run Tests with Newman
+      - name: Run API Tests
+        run: |
+          newman run twitter-platform-tests.json \
+            --env-var "baseUrl=http://localhost:3000" \
+            --reporters cli,html,htmlextra,json \
+            --reporter-html-export reports/test-report.html \
+            --reporter-htmlextra-export reports/test-report-extra.html \
+            --reporter-json-export reports/test-results.json \
+            --bail \
+            --color on
+      
+      # Step 6: Upload Test Reports as Artifacts
+      - name: Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-reports-node-${{ matrix.node-version }}
+          path: reports/
+          retention-days: 30
+      
+      # Step 7: Stop Mock Server
+      - name: Stop Mock Server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill $(cat server.pid) || true
+          fi
+      
+      # Step 8: Parse Test Results
+      - name: Parse Test Results
+        if: always()
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Extract results from JSON
+          TOTAL=$(jq '.run.stats.tests.total' reports/test-results.json)
+          PASSED=$(jq '.run.stats.tests.passed' reports/test-results.json)
+          FAILED=$(jq '.run.stats.tests.failed' reports/test-results.json)
+          
+          echo "- **Total Tests:** $TOTAL" >> $GITHUB_STEP_SUMMARY
+          echo "- **Passed:** ✅ $PASSED" >> $GITHUB_STEP_SUMMARY
+          echo "- **Failed:** ❌ $FAILED" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$FAILED" -gt 0 ]; then
+            echo "❌ Tests failed!" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "✅ All tests passed!" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      # Step 9: Comment PR with Results (only on pull requests)
+      - name: Comment PR with Test Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('reports/test-results.json', 'utf8'));
+            
+            const total = results.run.stats.tests.total;
+            const passed = results.run.stats.tests.passed;
+            const failed = results.run.stats.tests.failed;
+            const duration = results.run.timings.completed - results.run.timings.started;
+            
+            const comment = `## 🧪 API Test Results
+            
+            | Metric | Value |
+            |--------|-------|
+            | Total Tests | ${total} |
+            | ✅ Passed | ${passed} |
+            | ❌ Failed | ${failed} |
+            | ⏱️ Duration | ${duration}ms |
+            | 📊 Success Rate | ${((passed/total)*100).toFixed(2)}% |
+            
+            ${failed > 0 ? '❌ Some tests failed. Please check the logs.' : '✅ All tests passed!'}
+            
+            [View Detailed Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+  
+  # Deploy report to GitHub Pages
+  deploy-reports:
+    name: Deploy Test Reports to GitHub Pages
+    needs: api-tests
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    steps:
+      - name: Download Test Reports
+        uses: actions/download-artifact@v3
+        with:
+          name: test-reports-node-20.x
+          path: ./reports
+      
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: ./reports
+      
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v2
+
+  # Notify on Slack/Discord (optional)
+  notify:
+    name: Send Notifications
+    needs: api-tests
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Notify Slack
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ needs.api-tests.result }}"
+          COLOR=$( [ "$STATUS" == "success" ] && echo "good" || echo "danger" )
+          
+          curl -X POST $SLACK_WEBHOOK_URL \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"attachments\": [{
+                \"color\": \"$COLOR\",
+                \"title\": \"Twitter API Tests - $STATUS\",
+                \"text\": \"Tests completed with status: $STATUS\",
+                \"fields\": [
+                  {
+                    \"title\": \"Branch\",
+                    \"value\": \"${{ github.ref_name }}\",
+                    \"short\": true
+                  },
+                  {
+                    \"title\": \"Commit\",
+                    \"value\": \"${{ github.sha }}\",
+                    \"short\": true
+                  }
+                ]
+              }]
+            }"
