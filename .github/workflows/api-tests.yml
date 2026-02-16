@@ -73,21 +73,43 @@ jobs:
       - name: Parse Test Results
         if: always()
         run: |
-          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐦 Twitter API Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          TOTAL=$(jq '.run.stats.tests.total' reports/test-results.json)
-          PASSED=$(jq '.run.stats.tests.passed' reports/test-results.json)
-          FAILED=$(jq '.run.stats.tests.failed' reports/test-results.json)
+          # Get assertion counts (actual test validations)
+          TOTAL_ASSERTIONS=$(jq '.run.stats.assertions.total' reports/test-results.json)
+          FAILED_ASSERTIONS=$(jq '.run.stats.assertions.failed' reports/test-results.json)
+          PASSED_ASSERTIONS=$((TOTAL_ASSERTIONS - FAILED_ASSERTIONS))
           
-          echo "- **Total Tests:** $TOTAL" >> $GITHUB_STEP_SUMMARY
-          echo "- **Passed:** ✅ $PASSED" >> $GITHUB_STEP_SUMMARY
-          echo "- **Failed:** ❌ $FAILED" >> $GITHUB_STEP_SUMMARY
+          # Get request counts
+          TOTAL_REQUESTS=$(jq '.run.stats.requests.total' reports/test-results.json)
+          FAILED_REQUESTS=$(jq '.run.stats.requests.failed' reports/test-results.json)
+          
+          # Calculate success rate
+          SUCCESS_RATE=$(echo "scale=2; ($PASSED_ASSERTIONS/$TOTAL_ASSERTIONS)*100" | bc)
+          
+          echo "### 🧪 Test Assertions" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Assertions:** $TOTAL_ASSERTIONS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Passed:** ✅ $PASSED_ASSERTIONS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Failed:** ❌ $FAILED_ASSERTIONS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Success Rate:** ${SUCCESS_RATE}%" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ "$FAILED" -gt 0 ]; then
-            echo "❌ Tests failed!" >> $GITHUB_STEP_SUMMARY
+          echo "### 📡 API Requests" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Requests:** $TOTAL_REQUESTS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Failed Requests:** $FAILED_REQUESTS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📊 Test Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- POST /v2/tweets (8 assertions)" >> $GITHUB_STEP_SUMMARY
+          echo "- GET /v2/users/by/username/{username}/tweets (8 assertions)" >> $GITHUB_STEP_SUMMARY
+          echo "- GET /v1.1/trends/place.json (7 assertions)" >> $GITHUB_STEP_SUMMARY
+          echo "- GET /v2/users/analytics (7 assertions)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$FAILED_ASSERTIONS" -gt 0 ]; then
+            echo "❌ **Status:** Tests failed!" >> $GITHUB_STEP_SUMMARY
             exit 1
           else
-            echo "✅ All tests passed!" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Status:** All tests passed!" >> $GITHUB_STEP_SUMMARY
           fi
